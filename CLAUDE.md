@@ -70,7 +70,7 @@ flask项目/
 │
 ├── dto/                       # 数据传输对象
 │   ├── __init__.py
-│   └── response.py            # 统一响应格式
+│   └── response.py            # 统一响应格式 (ok/fail + status_code)
 │
 ├── utils/                     # 工具函数
 │   ├── auth.py                # JWT 工具
@@ -245,6 +245,45 @@ flask项目/
 2. controller 层**优先**用 `current_app.config`，不要在 controller 中直接 `from config import Config`
 3. service 层和工具脚本**优先**用 `Config.KEY`，不需要 Flask 上下文
 4. `load_dotenv()` **只在 `config.py` 模块级别调用一次**，其他文件不要再调用
+
+### 统一响应格式
+
+所有 API 响应通过 [dto/response.py](dto/response.py) 中的函数构建，确保返回格式一致。
+
+| 函数 | 签名 | 默认状态码 | 返回格式 |
+|------|------|-----------|---------|
+| `ok()` | `ok(data=None, status_code=200, **extra)` | 200 | `({"success": True, ...}, status_code)` |
+| `ok_without_data()` | `ok_without_data(status_code=200, **extra)` | 200 | `({"success": True, ...}, status_code)` |
+| `fail()` | `fail(message, status_code=400)` | 400 | `({"success": False, "message": ...}, status_code)` |
+
+**使用示例：**
+
+```python
+from dto.response import ok, fail, ok_without_data
+
+# 查询成功（默认 200）
+return ok(data=documents)
+return ok(data=detail, message="操作成功")
+
+# 创建资源（覆盖为 201）
+return ok(data=obj.to_dict(), status_code=201)
+return ok(message="创建成功", status_code=201)
+
+# 无 data 包装的成功响应
+return ok_without_data(total=10, page=1, chunks=[...])
+
+# 失败响应
+return fail("请选择文件")              # 400
+return fail("用户不存在", 401)         # 401
+return fail("权限不足", 403)           # 403
+```
+
+**规则：**
+1. Controller 层**统一使用** `ok()` / `fail()` 构建响应，不要手写 dict
+2. `data` 参数用于返回主体数据（列表、对象等），会自动包在 `"data"` 键中
+3. 额外的顶级字段（如 `message`、`total`、`page`）通过 `**extra` 传入，平铺在响应中
+4. 需要自定义状态码时传入 `status_code` 参数，不要在外面包一层元组
+5. `fail()` 的 `status_code` 是位置参数，`ok()` 的是关键字参数 — 不要混淆
 
 ---
 

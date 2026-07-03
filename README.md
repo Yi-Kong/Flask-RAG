@@ -54,7 +54,7 @@ flask项目/
 ├── controller/                # 控制器层
 ├── routers/                   # 路由定义层 (Blueprint)
 ├── middleware/                 # 中间件（认证 + 错误处理）
-├── dto/                       # 数据传输对象
+├── dto/                       # 数据传输对象 (统一响应格式 ok/fail)
 ├── utils/                     # 工具函数
 ├── view/                      # 前端模板 (Jinja2)
 ├── migrations/                # 数据库迁移 (Alembic)
@@ -74,6 +74,24 @@ flask项目/
                                                           → deepseek → DeepSeek API
 页面 → router → controller → render_template → Jinja2 模板
 ```
+
+### API 统一响应格式
+
+所有 API 返回统一的 JSON 格式，通过 `dto/response.py` 构建：
+
+```json
+// 成功响应
+{ "success": true, "data": {...}, "message": "..." }
+
+// 失败响应
+{ "success": false, "message": "错误信息" }
+```
+
+| 函数 | 默认状态码 | 用途 |
+|------|-----------|------|
+| `ok(data, status_code=200, **extra)` | 200 | 成功响应，可覆盖为 201 等 |
+| `ok_without_data(status_code=200, **extra)` | 200 | 成功响应（data 字段平铺） |
+| `fail(message, status_code=400)` | 400 | 失败响应 |
 
 ---
 
