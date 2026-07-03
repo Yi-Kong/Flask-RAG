@@ -226,6 +226,26 @@ flask项目/
 6. **文件上传**：校验扩展名白名单，使用 UUID 重命名，限制文件大小
 7. **日志**：打印 API key 时必须截断（只显示前 8 位 + `***`）
 
+### 配置访问规范
+
+项目所有配置集中定义在 [config.py](config.py) 的 `Config` 类中，通过 `app.config.from_object(Config)` 加载到 Flask 配置字典。根据代码所在层级选择对应的访问方式：
+
+| 场景 | 访问方式 | 示例 |
+|------|---------|------|
+| **Flask 请求上下文内**（controller 层） | `current_app.config["KEY"]` | `current_app.config["CHUNK_SIZE"]` |
+| **请求上下文外**（service 层、工具脚本、中间件） | `Config.KEY` | `Config.DEEPSEEK_API_KEY` |
+
+**为什么有两种方式？**
+
+- `Config.KEY` 是类属性，**无需 Flask 上下文**即可访问，适合 service 层初始化、独立脚本等场景
+- `current_app.config["KEY"]` 是 Flask 标准方式，适合 controller 层（在 `app.config.from_object()` 之后所有 `Config` 属性已自动同步到 `current_app.config`）
+
+**规则：**
+1. 新增配置项时，在 `Config` 类中添加属性，然后两种方式自动可用
+2. controller 层**优先**用 `current_app.config`，不要在 controller 中直接 `from config import Config`
+3. service 层和工具脚本**优先**用 `Config.KEY`，不需要 Flask 上下文
+4. `load_dotenv()` **只在 `config.py` 模块级别调用一次**，其他文件不要再调用
+
 ---
 
 ## 常用命令

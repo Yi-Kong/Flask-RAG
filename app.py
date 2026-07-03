@@ -12,7 +12,6 @@ Usage::
 import logging
 import os
 
-from dotenv import load_dotenv
 from flask import Flask
 
 from config import Config, validate_config
@@ -32,8 +31,7 @@ def create_app(config_class=Config) -> Flask:
     Returns:
         配置完成的 Flask 应用实例，可用于 ``app.run()`` 或 ``app.test_client()``.
     """
-    # ── 加载环境变量 & 校验 ──────────────────────────────────────
-    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+    # ── 校验必需配置（.env 已在 config.py 导入时加载）────────────
     validate_config()
 
     # ── 创建 Flask 实例 ──────────────────────────────────────────
