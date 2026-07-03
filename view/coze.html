@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英雄联盟 - 信息提交演示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            width: 100%;
+            height: 100vh;
+            background: url("https://game.gtimg.cn/images/lol/act/img/skin/big103005.jpg") center/cover no-repeat;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        body::after {
+            content: "";
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 1;
+        }
+        /* 容器 */
+        .box {
+            width: 420px;
+            background: #0f141d;
+            border: 1px solid #c89b3c;
+            padding: 40px 35px;
+            z-index: 2;
+            border-radius: 6px;
+            box-shadow: 0 0 30px #c89b3c40;
+        }
+        .title {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .title h1 {
+            color: #c89b3c;
+            font-size: 28px;
+            letter-spacing: 2px;
+        }
+        /* 输入框 */
+        #inputText {
+            width: 100%;
+            height: 46px;
+            background: #1a212e;
+            border: 1px solid #333b4a;
+            outline: none;
+            padding: 0 16px;
+            color: #fff;
+            font-size: 16px;
+            border-radius: 3px;
+            margin-bottom: 16px;
+        }
+        #inputText:focus {
+            border-color: #c89b3c;
+            box-shadow: 0 0 8px #c89b3c33;
+        }
+        /* 提交按钮 */
+        #submitBtn {
+            width: 100%;
+            height: 48px;
+            background: #c89b3c;
+            border: none;
+            font-size: 17px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-bottom: 25px;
+        }
+        #submitBtn:hover {
+            background: #e6b85c;
+            box-shadow: 0 0 12px #c89b3c60;
+        }
+        /* 回显文本区域 */
+        .show-area {
+            border-top: 1px solid #333b4a;
+            padding-top: 20px;
+        }
+        .show-area h4 {
+            color: #c89b3c;
+            margin-bottom: 10px;
+        }
+        #resultText {
+            color: #eee;
+            font-size: 16px;
+            line-height: 1.6;
+            min-height: 30px;
+        }
+        /* 移动端适配 */
+        @media(max-width: 480px) {
+            .box {
+                width: 92%;
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <div class="title">
+            <h1>英雄联盟留言提交</h1>
+        </div>
+      <form action="/red" method="post">
+        <!-- 输入框 -->
+        <input type="text" name="content" id="inputText" placeholder="输入内容后点击提交">
+        <!-- 提交按钮 -->
+        <button id="submitBtn" type="submit">提交内容</button>
+        </form>
+        <!-- 回显文本标签 -->
+        <div class="show-area">
+            <h4>提交内容回显：</h4>
+            <text>
+              {{ code }}
+            </text>
+            <span id="resultText"></span>
+        </div>
+    </div>
+
+    <script>
+        // 获取元素
+        const input = document.getElementById('inputText');
+        const btn = document.getElementById('submitBtn');
+        const showText = document.getElementById('resultText');
+
+        // 点击提交事件
+        btn.onclick = function() {
+            // 获取输入框的值
+            let val = input.value.trim();
+            if(val === "") {
+                showText.innerText = "请输入有效内容！";
+                showText.style.color = "#ff6666";
+            } else {
+                showText.innerText = val;
+                showText.style.color = "#eee";
+            }
+        }
+    </script>
+</body>
+</html>

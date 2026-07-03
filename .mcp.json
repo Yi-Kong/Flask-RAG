@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "mysql": {
+      "command": "sh",
+      "args": ["./scripts/run_mysql_mcp.sh"]
+    },
+    "chromadb": {
+      "command": "sh",
+      "args": ["./scripts/run_chromadb_mcp.sh"]
+    },
+    "github": {
+      "command": "sh",
+      "args": ["./scripts/run_github_mcp.sh"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    }
+  }
+}

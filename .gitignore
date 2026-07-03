@@ -1,0 +1,46 @@
+# ── 环境变量文件（包含敏感信息，禁止提交）──
+.env
+.env.*
+!.env.example
+
+# ── Claude Code 本地设置 ──
+.claude/settings.local.json
+CLAUDE.local.md
+
+# ── 密钥和凭证文件 ──
+secrets/
+*.pem
+*.key
+*credentials*
+*secret*
+
+# ── 上传文件目录 ──
+uploads/
+
+# ── Python ──
+__pycache__/
+.venv/
+venv/
+env/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.DS_Store
+
+# ── ChromaDB 数据目录 ──
+chroma_data/
+chroma.log
+
+# ── 嵌入模型文件（太大，不适合 git）──
+embedding_models/
+
+# ── 本地数据库文件 ──
+*.db
+*.sqlite
+*.sqlite3
+
+# ── IDE ──
+.vscode/
+.idea/

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Microsoft YaHei", sans-serif; }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #1a1a2e;
+        }
+        .register-box {
+            width: 420px;
+            background: #16213e;
+            padding: 40px 35px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .register-box h2 {
+            text-align: center;
+            color: #e94560;
+            margin-bottom: 30px;
+            font-size: 26px;
+        }
+        .register-box input,
+        .register-box select {
+            width: 100%;
+            height: 44px;
+            background: #0f3460;
+            border: 1px solid #1a1a4e;
+            outline: none;
+            padding: 0 14px;
+            color: #fff;
+            font-size: 15px;
+            border-radius: 4px;
+            margin-bottom: 18px;
+        }
+        .register-box select {
+            cursor: pointer;
+            appearance: none;
+        }
+        .register-box select option {
+            background: #0f3460;
+            color: #fff;
+        }
+        .register-box input:focus,
+        .register-box select:focus {
+            border-color: #e94560;
+        }
+        .register-box button {
+            width: 100%;
+            height: 46px;
+            background: #e94560;
+            border: none;
+            color: #fff;
+            font-size: 17px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .register-box button:hover {
+            background: #ff6b81;
+        }
+        .register-box .tip {
+            text-align: center;
+            color: #aaa;
+            font-size: 14px;
+            margin-top: 16px;
+        }
+        .register-box .tip a {
+            color: #e94560;
+            text-decoration: none;
+        }
+        .register-box .tip a:hover {
+            text-decoration: underline;
+        }
+        .flash-msg {
+            background: #e94560;
+            color: #fff;
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 18px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="register-box">
+        <h2>用户注册</h2>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="flash-msg">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form action="/register" method="post">
+            <input type="text" name="user" placeholder="用户名（2-50个字符）" required>
+            <input type="email" name="email" placeholder="邮箱" required>
+            <input type="password" name="pwd" placeholder="密码（不少于6位）" required>
+            <input type="password" name="pwd_confirm" placeholder="确认密码" required>
+            <select name="role">
+                <option value="student">学生</option>
+                <option value="teacher">教师</option>
+            </select>
+            <button type="submit">注 册</button>
+        </form>
+        <div class="tip">
+            已有账号？<a href="/login">去登录</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>向量库管理 - ChromaDB</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Microsoft YaHei", monospace; }
+        body {
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        /* ── 顶部导航 ── */
+        .topbar {
+            background: #16213e;
+            padding: 0 32px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #1a1a4e;
+        }
+        .topbar .logo {
+            font-size: 20px;
+            color: #e94560;
+            font-weight: bold;
+        }
+        .topbar .nav-links a {
+            color: #aaa;
+            text-decoration: none;
+            margin-left: 24px;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+        .topbar .nav-links a:hover, .topbar .nav-links a.active {
+            color: #e94560;
+        }
+
+        /* ── 主内容区 ── */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 28px 24px;
+        }
+
+        /* ── Tab 切换 ── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #16213e;
+        }
+        .tabs button {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 15px;
+            padding: 10px 24px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+        .tabs button.active {
+            color: #e94560;
+            border-bottom-color: #e94560;
+        }
+        .tabs button:hover {
+            color: #ccc;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ── 卡片 ── */
+        .card {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid #1a1a4e;
+        }
+        .card h3 {
+            color: #e94560;
+            margin-bottom: 16px;
+            font-size: 18px;
+        }
+
+        /* ── 概览统计 ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #0f3460;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #e94560;
+        }
+        .stat-card .stat-label {
+            font-size: 13px;
+            color: #888;
+            margin-top: 6px;
+        }
+
+        /* ── 表格 ── */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid #1a1a4e;
+        }
+        th {
+            color: #888;
+            font-weight: normal;
+            font-size: 13px;
+            background: #0f3460;
+        }
+        tr:hover td {
+            background: rgba(233, 69, 96, 0.05);
+        }
+
+        /* ── 分块文本展示 ── */
+        .chunk-text {
+            max-width: 500px;
+            max-height: 80px;
+            overflow-y: auto;
+            color: #ccc;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: #0a0f1a;
+            padding: 8px 12px;
+            border-radius: 4px;
+        }
+        .chunk-text::-webkit-scrollbar { width: 4px; }
+        .chunk-text::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+        /* ── 搜索框 ── */
+        .search-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .search-row input {
+            flex: 1;
+            height: 44px;
+            background: #0f3460;
+            border: 1px solid #1a1a4e;
+            outline: none;
+            padding: 0 14px;
+            color: #fff;
+            font-size: 15px;
+            border-radius: 4px;
+        }
+        .search-row input:focus {
+            border-color: #e94560;
+        }
+        .search-row button {
+            height: 44px;
+            padding: 0 28px;
+            background: #e94560;
+            border: none;
+            color: #fff;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.3s;
+            white-space: nowrap;
+        }
+        .search-row button:hover { background: #ff6b81; }
+        .search-row button:disabled { background: #555; cursor: not-allowed; }
+
+        /* ── 搜索结果 ── */
+        .result-item {
+            background: #0f3460;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-left: 3px solid #e94560;
+        }
+        .result-item .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .result-item .result-meta {
+            font-size: 12px;
+            color: #888;
+        }
+        .result-item .result-meta span {
+            margin-right: 16px;
+        }
+        .result-item .similarity {
+            font-weight: bold;
+            color: #4caf50;
+            font-size: 15px;
+        }
+        .result-item .result-text {
+            color: #ccc;
+            font-size: 14px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        /* ── 分页 / 筛选 ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .toolbar select, .toolbar button {
+            height: 36px;
+            padding: 0 14px;
+            background: #0f3460;
+            border: 1px solid #1a1a4e;
+            color: #eee;
+            font-size: 13px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .toolbar select:focus { border-color: #e94560; outline: none; }
+        .pagination {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+            color: #888;
+        }
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pagination button:hover:not(:disabled) {
+            background: #e94560;
+        }
+
+        /* ── 空状态 / 加载 ── */
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        .empty .icon { font-size: 48px; margin-bottom: 12px; }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        .spinner {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            border: 3px solid #333;
+            border-top-color: #e94560;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── badge ── */
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            background: #333;
+            color: #aaa;
+        }
+        .badge.doc { background: #1a3a5c; color: #64b5f6; }
+        .badge.type { background: #2a1a3a; color: #ce93d8; }
+
+        .msg {
+            text-align: center;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 12px;
+            font-size: 14px;
+        }
+        .msg.error { background: #4a1a1a; color: #e94560; }
+        .msg.info  { background: #1a3a4a; color: #64b5f6; }
+    </style>
+</head>
+<body>
+    <!-- ──── 顶部导航 ──── -->
+    <div class="topbar">
+        <span class="logo">🧠 向量库管理</span>
+        <div class="nav-links">
+            <a href="/">首页</a>
+            <a href="/upload">上传文档</a>
+            <a href="/admin/vectors" class="active">向量库</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- ──── Tab 切换 ──── -->
+        <div class="tabs">
+            <button class="active" onclick="switchTab('overview')">📊 概览</button>
+            <button onclick="switchTab('browse')">📄 分块浏览</button>
+            <button onclick="switchTab('search')">🔍 向量搜索</button>
+        </div>
+
+        <!-- ============ 概览 Tab ============ -->
+        <div id="tab-overview" class="tab-content active">
+            <div class="card">
+                <h3>ChromaDB 服务状态</h3>
+                <div id="overviewContent">
+                    <div class="loading"><span class="spinner"></span> 正在连接 ChromaDB...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ 分块浏览 Tab ============ -->
+        <div id="tab-browse" class="tab-content">
+            <div class="card">
+                <h3>分块列表</h3>
+                <div class="toolbar">
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <label style="font-size:13px;color:#888;">筛选文档：</label>
+                        <select id="docFilter" onchange="loadChunks(1)">
+                            <option value="">全部文档</option>
+                        </select>
+                    </div>
+                    <div class="pagination" id="browsePagination"></div>
+                </div>
+                <div id="chunksTable">
+                    <div class="loading"><span class="spinner"></span> 加载中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ 搜索 Tab ============ -->
+        <div id="tab-search" class="tab-content">
+            <div class="card">
+                <h3>语义搜索</h3>
+                <div class="search-row">
+                    <input type="text" id="searchInput" placeholder="输入关键词，在向量库中语义搜索..."
+                           onkeydown="if(event.key==='Enter')doSearch()">
+                    <select id="topK" style="height:44px;background:#0f3460;border:1px solid #1a1a4e;color:#eee;padding:0 10px;border-radius:4px;font-size:14px;">
+                        <option value="3">Top 3</option>
+                        <option value="5" selected>Top 5</option>
+                        <option value="10">Top 10</option>
+                    </select>
+                    <button id="searchBtn" onclick="doSearch()">搜 索</button>
+                </div>
+                <div id="searchResults">
+                    <div class="empty">
+                        <div class="icon">🔍</div>
+                        <p>输入关键词后点击搜索，将在向量库中进行语义匹配</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============ Tab 切换 ============
+        function switchTab(name) {
+            document.querySelectorAll('.tabs button').forEach((btn, i) => {
+                btn.classList.toggle('active', btn.textContent.includes(
+                    name === 'overview' ? '概览' : name === 'browse' ? '浏览' : '搜索'
+                ));
+            });
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+
+            if (name === 'overview') loadOverview();
+            else if (name === 'browse' && !window._chunksLoaded) loadChunks();
+        }
+
+        // ============ 概览 ============
+        async function loadOverview() {
+            const container = document.getElementById('overviewContent');
+            container.innerHTML = '<div class="loading"><span class="spinner"></span> 正在连接 ChromaDB...</div>';
+
+            try {
+                const res = await fetch('/api/admin/vectors/overview');
+                const data = await res.json();
+
+                if (!data.success) {
+                    container.innerHTML = `<div class="msg error">❌ ${data.message}</div>`;
+                    return;
+                }
+
+                let html = '<div class="stats-grid">';
+                html += `<div class="stat-card">
+                    <div class="stat-value">${data.collections.length}</div>
+                    <div class="stat-label">集合数量</div>
+                </div>`;
+                html += `<div class="stat-card">
+                    <div class="stat-value">${data.total_chunks}</div>
+                    <div class="stat-label">总分块数</div>
+                </div>`;
+                html += `<div class="stat-card">
+                    <div class="stat-value" style="font-size:14px;word-break:break-all;">${data.data_path}</div>
+                    <div class="stat-label">数据路径（本地模式）</div>
+                </div>`;
+
+                if (data.collections.length > 0) {
+                    const col = data.collections[0];
+                    html += `<div class="stat-card">
+                        <div class="stat-value">${col.count}</div>
+                        <div class="stat-label">集合「${col.name}」分块数</div>
+                    </div>`;
+                }
+                html += '</div>';
+
+                // 集合详情
+                if (data.collections.length > 0) {
+                    html += '<table><thead><tr><th>集合名称</th><th>分块数量</th><th>距离度量</th></tr></thead><tbody>';
+                    for (const c of data.collections) {
+                        html += `<tr>
+                            <td style="color:#e94560;">${c.name}</td>
+                            <td>${c.count}</td>
+                            <td>cosine</td>
+                        </tr>`;
+                    }
+                    html += '</tbody></table>';
+                } else {
+                    html += '<div class="empty"><div class="icon">📭</div><p>还没有任何集合，请先上传文档</p></div>';
+                }
+
+                container.innerHTML = html;
+            } catch (e) {
+                container.innerHTML = `<div class="msg error">❌ 连接失败: ${e.message}</div>`;
+            }
+        }
+
+        // ============ 分块浏览 ============
+        async function loadChunks(page = 1) {
+            window._chunksLoaded = true;
+            const container = document.getElementById('chunksTable');
+            container.innerHTML = '<div class="loading"><span class="spinner"></span> 加载中...</div>';
+
+            const docFilter = document.getElementById('docFilter').value;
+            let url = `/api/admin/vectors/chunks?page=${page}&page_size=15`;
+            if (docFilter) url += `&document_id=${docFilter}`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!data.success) {
+                    container.innerHTML = `<div class="msg error">❌ ${data.message}</div>`;
+                    return;
+                }
+
+                // 更新文档筛选下拉框
+                const sel = document.getElementById('docFilter');
+                const currentVal = sel.value;
+                sel.innerHTML = '<option value="">全部文档</option>';
+                if (data.doc_stats) {
+                    for (const d of data.doc_stats) {
+                        sel.innerHTML += `<option value="${d.document_id}">doc#${d.document_id} — ${d.title} (${d.count}块)</option>`;
+                    }
+                }
+                sel.value = currentVal;
+
+                if (data.total === 0) {
+                    container.innerHTML = '<div class="empty"><div class="icon">📭</div><p>向量库中没有分块，请先上传文档</p></div>';
+                    document.getElementById('browsePagination').innerHTML = '';
+                    return;
+                }
+
+                // 表格
+                let html = '<table><thead><tr><th>Chunk ID</th><th>文档</th><th>序号</th><th>类型</th><th>字数</th><th>内容预览</th></tr></thead><tbody>';
+                for (const c of data.chunks) {
+                    html += `<tr>
+                        <td style="font-size:12px;color:#888;">${c.id}</td>
+                        <td><span class="badge doc">${escHtml(c.title)}</span></td>
+                        <td>${c.chunk_index}</td>
+                        <td><span class="badge type">${c.file_type}</span></td>
+                        <td>${c.char_count}</td>
+                        <td><div class="chunk-text">${escHtml(c.text.substring(0, 500))}${c.text.length > 500 ? '...' : ''}</div></td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+                container.innerHTML = html;
+
+                // 分页
+                let pagHtml = '';
+                pagHtml += `<button ${page <= 1 ? 'disabled' : ''} onclick="loadChunks(${page - 1})">◀ 上一页</button>`;
+                pagHtml += `<span>第 ${page} / ${data.total_pages} 页（共 ${data.total} 条）</span>`;
+                pagHtml += `<button ${page >= data.total_pages ? 'disabled' : ''} onclick="loadChunks(${page + 1})">下一页 ▶</button>`;
+                document.getElementById('browsePagination').innerHTML = pagHtml;
+            } catch (e) {
+                container.innerHTML = `<div class="msg error">❌ 加载失败: ${e.message}</div>`;
+            }
+        }
+
+        // ============ 向量搜索 ============
+        async function doSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            const topK = document.getElementById('topK').value;
+            const btn = document.getElementById('searchBtn');
+            const resultsDiv = document.getElementById('searchResults');
+
+            btn.disabled = true;
+            btn.textContent = '搜索中...';
+            resultsDiv.innerHTML = '<div class="loading"><span class="spinner"></span> 正在语义搜索...</div>';
+
+            try {
+                const res = await fetch(`/api/admin/vectors/search?q=${encodeURIComponent(query)}&top_k=${topK}`);
+                const data = await res.json();
+
+                if (!data.success) {
+                    resultsDiv.innerHTML = `<div class="msg error">❌ ${data.message}</div>`;
+                } else if (data.results.length === 0) {
+                    resultsDiv.innerHTML = '<div class="empty"><div class="icon">🔍</div><p>没有找到匹配的分块</p></div>';
+                } else {
+                    let html = `<p style="color:#888;margin-bottom:16px;font-size:13px;">搜索 "<strong style="color:#e94560;">${escHtml(data.query)}</strong>"，共 ${data.results.length} 条结果：</p>`;
+                    for (const r of data.results) {
+                        html += `<div class="result-item">
+                            <div class="result-header">
+                                <div class="result-meta">
+                                    <span>📄 <strong>${escHtml(r.title)}</strong></span>
+                                    <span>📌 分块 #${r.chunk_index}</span>
+                                    <span>📐 ${r.file_type}</span>
+                                    <span>Chunk ID: ${r.id}</span>
+                                </div>
+                                <div class="similarity">${(r.similarity * 100).toFixed(1)}%</div>
+                            </div>
+                            <div class="result-text">${escHtml(r.text)}</div>
+                        </div>`;
+                    }
+                    resultsDiv.innerHTML = html;
+                }
+            } catch (e) {
+                resultsDiv.innerHTML = `<div class="msg error">❌ 搜索失败: ${e.message}</div>`;
+            }
+
+            btn.disabled = false;
+            btn.textContent = '搜 索';
+        }
+
+        function escHtml(s) {
+            const div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
+        }
+
+        // ============ 初始加载 ============
+        loadOverview();
+    </script>
+</body>
+</html>
