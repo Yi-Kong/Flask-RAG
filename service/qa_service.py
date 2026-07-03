@@ -66,7 +66,13 @@ def ask_question_service(
             raise NotFoundException("文档不存在")
 
     # ── 执行 RAG ──
-    from service.rag_service import rag_ask_service
+    from service.rag_service import format_conversation_history, rag_ask_service
+
+    # 获取对话历史（用于查询改写和上下文注入）
+    conversation_history_text = None
+    if conversation_id:
+        messages = get_conversation_messages(conversation_id)
+        conversation_history_text = format_conversation_history(messages)
 
     try:
         result = rag_ask_service(
@@ -75,6 +81,7 @@ def ask_question_service(
             conversation_id=conversation_id,
             document_id=document_id,
             top_k=top_k,
+            conversation_history_text=conversation_history_text,
         )
     except RuntimeError as e:
         raise ServiceException(str(e))

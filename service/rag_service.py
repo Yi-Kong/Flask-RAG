@@ -25,6 +25,14 @@ class ConfidenceLevel:
 
 RAG_SYSTEM_PROMPT = """你是一个校园智能问答助手。
 
+【多轮对话规则】当用户消息中包含「对话历史」时：
+  1. 必须结合历史上下文理解用户当前问题中的指代关系
+     - 如"除此之外"、"刚才说的"、"那个"、"它"、"第二个"等指代词
+     - 根据历史推断用户真正想问的内容
+  2. 回答时应自然关联之前的讨论内容，保持对话连贯性
+  3. 不要在每次回答中重复介绍已经讨论过的背景知识
+  4. 如果用户追问"还有吗"、"继续"、"详细说说"，应基于历史中的话题继续展开
+
 【回答策略】请根据用户消息中标注的「可信度级别」选择对应的回答方式：
 
 ■ 高可信度模式 — 参考资料与问题高度相关时：
@@ -47,6 +55,7 @@ RAG_SYSTEM_PROMPT = """你是一个校园智能问答助手。
      「⚠️ 以下回答基于通用知识，校园资料库中暂无直接依据，仅供参考：」
   3. 回答依然要清晰、准确、适合学生理解
   4. 不要编造看似来自校园资料的虚假引用
+  5. 如果有「对话历史」，即使参考资料不相关，也应结合历史上下文回答，保持话题连续性
 
 注意：无论哪种模式，都不要输出与问题无关的内容。"""
 
@@ -199,13 +208,19 @@ def strip_fallback_disclaimer(answer: str, confidence_level: str) -> str:
     return answer
 
 
-def build_rag_prompt(context: str, question: str, confidence_level: str = ConfidenceLevel.GENERAL) -> str:
+def build_rag_prompt(
+    context: str,
+    question: str,
+    confidence_level: str = ConfidenceLevel.GENERAL,
+    conversation_history_text: str | None = None,
+) -> str:
     """构造 RAG 用户提示词，根据可信度级别区分指令.
 
     Args:
         context: 拼接后的参考资料文本.
         question: 用户原始问题.
         confidence_level: 可信度级别 (high/medium/general).
+        conversation_history_text: 格式化后的对话历史文本，有则插入.
 
     Returns:
         完整的用户提示词字符串.
@@ -217,8 +232,13 @@ def build_rag_prompt(context: str, question: str, confidence_level: str = Confid
     }
     instruction = level_instructions.get(confidence_level, level_instructions[ConfidenceLevel.GENERAL])
 
-    return f"""【可信度级别】{instruction}
+    # 构建对话历史段落
+    history_section = ""
+    if conversation_history_text and conversation_history_text.strip():
+        history_section = f"\n{conversation_history_text}\n"
 
+    return f"""【可信度级别】{instruction}
+{history_section}
 【参考资料】
 {context}
 
@@ -320,32 +340,158 @@ def classify_confidence(
     return ConfidenceLevel.MEDIUM
 
 
+# ── 对话历史工具 ────────────────────────────────────────────────────
+
+# 粗略 token 估算系数：中英文混合文本约 2 个字符 ≈ 1 token
+_TOKEN_ESTIMATE_RATIO = 0.5
+
+
+def _estimate_tokens(text: str) -> int:
+    """粗略估算文本的 token 数（适用于中英文混合）."""
+    return max(1, int(len(text) * _TOKEN_ESTIMATE_RATIO))
+
+
+def format_conversation_history(
+    messages: list,
+    max_tokens: int = 12000,
+) -> str:
+    """将对话历史消息格式化为 Prompt 上下文文本.
+
+    从最近到最远逐条累加 Q&A 对，接近 max_tokens 时截断。
+    短对话保留全部历史，长对话优先保留最近的对话。
+
+    Args:
+        messages: 按时间正序排列的消息列表（QARecord 对象，含 question/answer 属性）.
+        max_tokens: 历史文本的 token 预算上限.
+
+    Returns:
+        格式化后的历史文本，无历史时返回空字符串.
+    """
+    if not messages:
+        return ""
+
+    # 从最近到最远构建 Q&A 对
+    qa_pairs = []
+    for m in messages:
+        q = getattr(m, "question", "") or ""
+        a = getattr(m, "answer", "") or ""
+        qa_pairs.append((q, a))
+
+    # 从最近到最远累加
+    reversed_parts = []
+    used_tokens = 0
+
+    for q, a in reversed(qa_pairs):
+        pair_text = f"用户：{q}\n助手：{a}"
+        pair_tokens = _estimate_tokens(pair_text)
+        if used_tokens + pair_tokens > max_tokens:
+            # 如果第一条（最近的一条）就超预算，仍然保留但截断回答
+            if not reversed_parts:
+                truncated_a = a[: int((max_tokens - _estimate_tokens(f"用户：{q}\n助手：")) / _TOKEN_ESTIMATE_RATIO)]
+                if truncated_a:
+                    pair_text = f"用户：{q}\n助手：{truncated_a}..."
+                else:
+                    pair_text = f"用户：{q}"
+                reversed_parts.append(pair_text)
+            break
+        reversed_parts.append(pair_text)
+        used_tokens += pair_tokens
+
+    if not reversed_parts:
+        return ""
+
+    # 反转回正序
+    parts = list(reversed(reversed_parts))
+    history_text = "【对话历史】\n" + "\n\n".join(parts)
+    logger.info(
+        "对话历史格式化: %d/%d 条消息, 估算 tokens=%d, 最终长度=%d 字符",
+        len(parts), len(messages), used_tokens, len(history_text),
+    )
+    return history_text
+
+
+def rewrite_query_with_history(
+    question: str,
+    history_text: str,
+) -> str:
+    """利用对话历史将追问改写为独立的完整问题.
+
+    用于 embedding 检索前：将"除此之外呢？"这类依赖上下文的追问，
+    改写成语义完整的独立问题，从而提升向量检索的命中率。
+
+    Args:
+        question: 用户原始问题.
+        history_text: 格式化后的对话历史文本.
+
+    Returns:
+        改写后的独立问题，改写失败时返回原始问题.
+    """
+    if not history_text or not history_text.strip():
+        return question
+
+    from service.deepseek_service import chat_service
+
+    system_prompt = (
+        "你是一个查询改写助手。你的任务是结合对话历史，"
+        "将用户的追问改写为一个语义完整的独立问题。"
+        "只输出改写后的问题，不要加任何解释、引号或额外文字。"
+    )
+    user_prompt = (
+        f"{history_text}\n\n"
+        f"用户当前追问：{question}\n\n"
+        f"请将上述追问改写为一个独立的、不依赖上下文的完整问题："
+    )
+
+    try:
+        rewritten = chat_service(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.0,
+            max_tokens=200,
+        )
+        rewritten = rewritten.strip().strip('"').strip("'").strip("。").strip()
+        if rewritten and rewritten != question and len(rewritten) >= 3:
+            logger.info("查询改写成功: '%s' → '%s'", question[:80], rewritten[:80])
+            return rewritten
+        else:
+            logger.info("查询改写返回无效结果，使用原始问题: '%s'", question[:80])
+            return question
+    except Exception as e:
+        logger.warning("查询改写失败，回退到原始问题: %s", e)
+        return question
+
+
 def rag_ask_service(
     question: str,
     user_id: int,
     conversation_id: int,
     document_id: Optional[int] = None,
     top_k: int = 5,
+    conversation_history_text: str | None = None,
 ) -> Dict[str, Any]:
     """执行一次完整的 RAG 问答流程.
 
     流程：
+        0. （如有历史）查询改写 → 独立问题
         1. 问题向量化
         2. ChromaDB 检索 Top-K 文档块
         3. 余弦距离粗过滤
         4. LLM 语义相关性校验 → 确定最终可信度级别
-        5. 构造 RAG Prompt
+        5. 构造 RAG Prompt（含对话历史）
         6. 调用 DeepSeek API 获取回答
         7. 后处理剥离误加的免责声明
         8. 保存问答记录到 QARecord
         9. 返回前端所需数据
 
     Args:
-        question: 用户问题.
+        question: 用户原始问题.
         user_id: 当前用户 ID.
         conversation_id: 对话 ID.
         document_id: 限定检索的文档 ID（可选）.
         top_k: 检索返回的文档块数量.
+        conversation_history_text: 格式化后的对话历史文本（可选）.
 
     Returns:
         包含 answer, sources, qa_id 等字段的 dict.
@@ -356,10 +502,16 @@ def rag_ask_service(
     from service.embedder import embed_query_service
     from service.vector_store import search_service
 
+    # 0. 查询改写：利用历史将追问转为独立问题（提升检索命中率）
+    if conversation_history_text:
+        search_question = rewrite_query_with_history(question, conversation_history_text)
+    else:
+        search_question = question
+
     # 1. 问题向量化
     logger.info("RAG 问答开始: user_id=%d, conversation_id=%d, top_k=%d", user_id, conversation_id, top_k)
     try:
-        query_embedding = embed_query_service(question)
+        query_embedding = embed_query_service(search_question)
     except Exception as e:
         logger.error("问题向量化失败: %s", e)
         raise RuntimeError(f"问题向量化失败: {str(e)}")
@@ -416,7 +568,7 @@ def rag_ask_service(
     else:
         context = "（校园资料库中未找到与当前问题直接相关的内容，请切换到通用知识模式回答）"
 
-    user_prompt = build_rag_prompt(context, question, confidence_level)
+    user_prompt = build_rag_prompt(context, question, confidence_level, conversation_history_text)
 
     # 7. 调用 DeepSeek API 生成回答
     from service.deepseek_service import chat_with_prompt_service
