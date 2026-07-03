@@ -25,7 +25,7 @@
 | **前端** | Jinja2 模板 + 原生 JS | 服务端渲染，非前后端分离 |
 | **数据库** | MySQL 8.0 | 关系型数据库，SQLAlchemy ORM |
 | **数据库迁移** | Alembic / Flask-Migrate | 数据库版本管理 |
-| **向量数据库** | ChromaDB | PersistentClient 本地持久化，嵌入式模式 |
+| **向量数据库** | ChromaDB | HttpClient 客户端-服务器模式，需单独启动服务 |
 | **嵌入模型** | BGE-small-zh-v1.5 | 本地加载，512 维中文向量 |
 | **LLM** | DeepSeek (API) | RAG 回答生成 |
 | **认证** | JWT + Cookie | 用户认证与会话管理 |
@@ -70,7 +70,7 @@ flask项目/
 
 ```
 请求 → router → middleware(auth) → controller → service → dao → model(ORM) → MySQL
-                                                          → vector_store → ChromaDB(嵌入式)
+                                                          → vector_store → ChromaDB(客户端-服务器)
                                                           → deepseek → DeepSeek API
 页面 → router → controller → render_template → Jinja2 模板
 ```
@@ -324,7 +324,7 @@ python run.py
 
 启动成功后访问：**http://127.0.0.1:5001**
 
-> ChromaDB 使用嵌入式模式，随 Flask 自动启动，无需单独运行。
+> ChromaDB 使用客户端-服务器模式，启动 Flask 前需先启动 ChromaDB 服务。
 
 ### 9. 使用流程
 
@@ -345,7 +345,7 @@ Windows 用户有两种方式可选：
 | Windows 10/11 版本 ≥ 2004（支持 WSL2） | **方式一：WSL2（推荐）** |
 | 无法使用 WSL2（公司策略限制、系统版本过低） | **方式二：纯 Windows** |
 
-> ChromaDB 使用嵌入式模式（PersistentClient），**无需 Docker**，也无需单独启动 ChromaDB 服务。
+> ChromaDB 使用客户端-服务器模式，启动项目前需先启动 ChromaDB 服务（详见下方各平台说明）。
 
 ### 方式一：WSL2（推荐）
 

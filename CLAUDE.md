@@ -124,7 +124,7 @@ flask项目/
 | **前端** | Jinja2 模板 + 原生 JS | **服务端渲染，非前后端分离** |
 | **数据库** | MySQL 8.0 (Docker) | 关系型数据库，SQLAlchemy ORM |
 | **数据库迁移** | Alembic / Flask-Migrate | 数据库版本管理 |
-| **向量数据库** | ChromaDB | PersistentClient 本地持久化 |
+| **向量数据库** | ChromaDB | HttpClient 客户端-服务器模式 |
 | **嵌入模型** | BGE-small-zh-v1.5 | 本地加载，512 维中文向量 |
 | **LLM** | DeepSeek (API) | RAG 回答生成 |
 | **认证** | JWT + Cookie | 用户认证与会话管理 |
