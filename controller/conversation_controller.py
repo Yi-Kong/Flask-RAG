@@ -20,7 +20,7 @@ def conversations_controller():
         data = request.get_json(silent=True) or {}
         title = (data.get("title") or "").strip() or "新对话"
         conversation = create_conversation_service(user_id=user_id, title=title)
-        return ok(data=conversation.to_dict()), 201
+        return ok(message="对话创建成功", status_code=200)
 
     conversations = list_conversations_service(user_id)
     return ok(data=conversations)

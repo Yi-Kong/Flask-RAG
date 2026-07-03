@@ -6,23 +6,24 @@ Controller 层可直接调用生成一致的 JSON 响应.
 import json
 
 
-def ok(data=None, **extra):
-    """构建成功响应 dict.
+def ok(data=None, status_code=200, **extra):
+    """构建成功响应 (dict, status_code) 元组.
 
     Usage:
-        ok()                                # {"success": true}
-        ok(data=[...])                      # {"success": true, "data": [...]}
-        ok(data=obj, message="操作成功")     # {"success": true, "message": "...", "data": ...}
-        ok(total=10, page=1, chunks=[...])  # {"success": true, "total": 10, ...}
+        ok()                                          # 200
+        ok(data=[...])                                # 200
+        ok(data=obj, message="操作成功")               # 200
+        ok(data=obj, status_code=201)                 # 201 创建成功
+        ok(total=10, page=1, chunks=[...])            # 200
     """
     result = {"success": True}
     if data is not None:
         result["data"] = data
     result.update(extra)
-    return result
+    return result, status_code
 
 
-def ok_without_data(**extra):
+def ok_without_data(status_code=200, **extra):
     """构建成功响应（不包含 data 字段）.
 
     Usage:
@@ -31,7 +32,7 @@ def ok_without_data(**extra):
     """
     result = {"success": True}
     result.update(extra)
-    return result
+    return result, status_code
 
 
 def fail(message, status_code=400):
