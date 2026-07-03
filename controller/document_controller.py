@@ -8,7 +8,9 @@ from werkzeug.utils import secure_filename
 
 from dto.response import ok
 from exceptions import AuthenticationException, ValidationException
-from service.document_service import list_documents_service, upload_document_service
+from service.document_service import (delete_document_service,
+                                       list_documents_service,
+                                       upload_document_service)
 from utils.auth import get_current_user_id
 
 
@@ -63,6 +65,16 @@ def upload_document_controller():
         message=f"文件上传并索引成功，共生成 {document.chunk_count} 个分块",
         document=document.to_dict(),
     )
+
+
+def delete_document_controller(document_id):
+    """删除文档（登录用户均可删除）."""
+    user_id = get_current_user_id()
+    if not user_id:
+        raise AuthenticationException("用户不存在")
+
+    result = delete_document_service(document_id, current_app.config["UPLOAD_FOLDER"])
+    return ok(message=f"文档「{result['title']}」已删除，共清理 {result['deleted_chunks']} 个向量分块")
 
 
 def document_list_controller():

@@ -7,7 +7,8 @@
 import logging
 import os
 
-from dao.document_dao import (create_document, get_all_documents,
+from dao.document_dao import (create_document, delete_document_record,
+                               get_all_documents, get_document_by_id,
                                rollback_document, update_document_status)
 from exceptions import NotFoundException, ServiceException, ValidationException
 
@@ -135,6 +136,44 @@ def upload_document_service(
 
     logger.info("文档上传完成: '%s' (id=%d, chunks=%d)", title, document.id, chunk_count)
     return document
+
+
+def delete_document_service(document_id: int, upload_folder: str) -> dict:
+    """删除文档：清理向量 → 删除 DB 记录 → 删除本地文件.
+
+    Args:
+        document_id: 文档 ID.
+        upload_folder: 上传目录绝对路径（用于定位本地文件）.
+
+    Returns:
+        {"title": str, "deleted_chunks": int}
+
+    Raises:
+        NotFoundException: 文档不存在.
+    """
+    from service.vector_store import delete_document_service as delete_vectors
+
+    # ── 1. 查找文档 ──
+    document = get_document_by_id(document_id)
+    if document is None:
+        raise NotFoundException("文档不存在")
+
+    title = document.title
+    file_basename = document.file_path
+
+    # ── 2. 删除 ChromaDB 向量 ──
+    deleted_chunks = delete_vectors(document_id)
+
+    # ── 3. 删除数据库记录 ──
+    delete_document_record(document)
+
+    # ── 4. 删除本地文件（best-effort） ──
+    if file_basename:
+        save_path = os.path.join(upload_folder, file_basename)
+        _cleanup_files(save_path)
+
+    logger.info("文档删除完成: '%s' (id=%d, 清理向量=%d)", title, document_id, deleted_chunks)
+    return {"title": title, "deleted_chunks": deleted_chunks}
 
 
 def list_documents_service() -> list:

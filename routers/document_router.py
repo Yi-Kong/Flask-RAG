@@ -2,7 +2,8 @@
 
 from flask import Blueprint
 
-from controller.document_controller import (document_list_controller,
+from controller.document_controller import (delete_document_controller,
+                                            document_list_controller,
                                             upload_document_controller)
 from middleware.auth_middleware import AuthMiddleware
 
@@ -13,6 +14,9 @@ api_documents_bp.add_url_rule(
 )
 api_documents_bp.add_url_rule(
     "/", "document_list_controller", document_list_controller, methods=["GET"]
+)
+api_documents_bp.add_url_rule(
+    "/<int:document_id>", "delete_document_controller", delete_document_controller, methods=["DELETE"]
 )
 
 api_documents_bp.before_request(AuthMiddleware())
