@@ -3,7 +3,7 @@
 基于 Flask 的 RAG (Retrieval-Augmented Generation) 校园知识库系统，支持文档上传、向量化存储、智能问答。
 
 > **架构类型**: Flask + Jinja2 服务端渲染，非前后端分离。
-> **最后更新**: 2026-07-03
+> **最后更新**: 2026-07-08
 
 ---
 
@@ -37,8 +37,11 @@ flask项目/
 │   ├── auth_service.py        # 认证服务
 │   ├── document_service.py    # 文档管理服务
 │   ├── qa_service.py          # 问答服务
-│   ├── rag_service.py         # RAG 检索增强生成
-│   ├── deepseek_service.py    # DeepSeek LLM 调用
+│   ├── rag_service.py         # RAG 流程编排（置信度 + 后处理）
+│   ├── rag_chain.py           # LCEL RAG 链（检索 + 回答生成）
+│   ├── llm_factory.py         # LLM 工厂（多模型 Profile）
+│   ├── deepseek_service.py    # LLM 调用兼容层（委托 ChatOpenAI）
+│   ├── conversation_memory.py # 对话记忆管理（LangChain + tiktoken）
 │   ├── chunker.py             # 文本分块器
 │   ├── document_parser.py     # 文档解析 (PDF/DOCX/TXT/MD)
 │   ├── embedder.py            # 文本嵌入向量化 (BGE)
@@ -126,8 +129,21 @@ flask项目/
 | **数据库迁移** | Alembic / Flask-Migrate | 数据库版本管理 |
 | **向量数据库** | ChromaDB | HttpClient 客户端-服务器模式 |
 | **嵌入模型** | BGE-small-zh-v1.5 | 本地加载，512 维中文向量 |
-| **LLM** | DeepSeek (API) | RAG 回答生成 |
+| **LLM 调用** | LangChain (ChatOpenAI) | 统一多模型调用接口 |
+| **RAG 管线** | LangChain LCEL | 检索增强生成链式编排 |
+| **对话记忆** | LangChain ChatMessageHistory | 原生多轮对话消息管理 |
+| **Token 计数** | tiktoken | cl100k_base 编码精确计数 |
 | **认证** | JWT + Cookie | 用户认证与会话管理 |
+
+### 支持的多模型
+
+通过 `LLM_PROFILES_JSON` 配置，支持所有 OpenAI-compatible API：
+- **DeepSeek** (默认) — `deepseek-chat`
+- **OpenAI** — `gpt-4o` / `gpt-4o-mini`
+- **通义千问** — `qwen-max` / `qwen-plus`
+- **智谱 GLM** — `glm-4`
+- **Moonshot** — `moonshot-v1`
+- **本地模型** — Ollama / vLLM 等
 
 ## 数据库表
 
@@ -142,9 +158,31 @@ flask项目/
 
 ```
 请求 → router → middleware(auth) → controller → service → dao → model(ORM) → MySQL
-                                                          → vector_store → ChromaDB
-                                                          → deepseek → DeepSeek API
+                                                          → langchain(LCEL) → ChromaDB + LLM
 页面 → router → controller → render_template → Jinja2 模板
+```
+
+### Service 层 LangChain 组件
+
+| 文件 | 说明 |
+|------|------|
+| `service/llm_factory.py` | LLM 工厂：多模型 Profile 管理，创建 ChatOpenAI 实例 |
+| `service/deepseek_service.py` | LLM 调用兼容层，内部委托 ChatOpenAI |
+| `service/rag_chain.py` | LCEL RAG 链：ChromaRetriever + history_aware_retriever |
+| `service/conversation_memory.py` | 对话记忆管理：LangChain ChatMessageHistory + tiktoken |
+
+### RAG 问答流程（LangChain 重构后）
+
+```
+用户提问 → qa_service（加载对话记忆）
+         → rag_service.rag_ask_service()
+             1. 向量检索 + 余弦过滤 + LLM 相关性校验 → 确定可信度
+             2. ChromaRetriever + build_rag_chain() → LCEL 链
+                ├─ create_history_aware_retriever（查询改写 + 检索）
+                ├─ format_docs（拼接参考资料）
+                └─ create_stuff_documents_chain（LLM 生成回答）
+             3. strip_fallback_disclaimer（后处理）
+             4. create_qa_record（持久化）
 ```
 
 ---

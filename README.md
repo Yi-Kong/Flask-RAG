@@ -10,7 +10,7 @@
 
 - 📄 **文档管理** — 支持上传 PDF / DOCX / TXT / Markdown 文档，自动解析文本内容并建立向量索引
 - 🔍 **语义检索** — 基于 BGE 中文嵌入模型 + ChromaDB 向量数据库，实现语义级别的文档检索
-- 🤖 **智能问答** — 结合 DeepSeek 大模型，基于检索到的文档内容生成准确回答
+- 🤖 **智能问答** — 基于 LangChain LCEL 编排 RAG 管线，支持 DeepSeek/OpenAI/通义千问/智谱 GLM 等多模型切换
 - 💬 **对话管理** — 支持多轮对话，保存历史问答记录
 - 🔐 **用户认证** — JWT + Cookie 认证，支持注册/登录
 - 📝 **小红书生成** — 基于文档内容自动生成小红书风格文案
@@ -27,8 +27,20 @@
 | **数据库迁移** | Alembic / Flask-Migrate | 数据库版本管理 |
 | **向量数据库** | ChromaDB | HttpClient 客户端-服务器模式，需单独启动服务 |
 | **嵌入模型** | BGE-small-zh-v1.5 | 本地加载，512 维中文向量 |
-| **LLM** | DeepSeek (API) | RAG 回答生成 |
+| **LLM 调用** | LangChain (ChatOpenAI) | 统一多模型调用接口，支持 OpenAI-compatible API |
+| **RAG 管线** | LangChain LCEL | 检索增强生成链式编排（检索 + 回答生成） |
+| **对话记忆** | LangChain ChatMessageHistory + tiktoken | 原生多轮对话消息管理 + cl100k_base 精确 token 计数 |
 | **认证** | JWT + Cookie | 用户认证与会话管理 |
+
+### 支持的多模型
+
+通过 `LLM_PROFILES_JSON` 配置，支持所有 OpenAI-compatible API：
+- **DeepSeek** (默认) — `deepseek-chat`
+- **OpenAI** — `gpt-4o` / `gpt-4o-mini`
+- **通义千问** — `qwen-max` / `qwen-plus`
+- **智谱 GLM** — `glm-4`
+- **Moonshot** — `moonshot-v1`
+- **本地模型** — Ollama / vLLM 等
 
 ---
 
@@ -50,7 +62,16 @@ flask项目/
 │   └── qa_record.py           # 问答记录模型
 │
 ├── dao/                       # 数据访问层
-├── service/                   # 业务逻辑层（含 RAG/DeepSeek/嵌入/向量存储）
+├── service/                   # 业务逻辑层
+│   ├── rag_service.py         # RAG 流程编排（置信度 + 后处理）
+│   ├── rag_chain.py           # LCEL RAG 链（检索 + 回答生成）
+│   ├── llm_factory.py         # LLM 工厂（多模型 Profile）
+│   ├── deepseek_service.py    # LLM 调用兼容层（委托 ChatOpenAI）
+│   ├── conversation_memory.py # 对话记忆管理（LangChain + tiktoken）
+│   ├── chunker.py             # 文本分块器
+│   ├── document_parser.py     # 文档解析
+│   ├── embedder.py            # 文本嵌入向量化
+│   └── vector_store.py        # ChromaDB 向量存储
 ├── controller/                # 控制器层
 ├── routers/                   # 路由定义层 (Blueprint)
 ├── middleware/                 # 中间件（认证 + 错误处理）
@@ -70,8 +91,7 @@ flask项目/
 
 ```
 请求 → router → middleware(auth) → controller → service → dao → model(ORM) → MySQL
-                                                          → vector_store → ChromaDB(客户端-服务器)
-                                                          → deepseek → DeepSeek API
+                                                          → langchain(LCEL) → ChromaDB + LLM
 页面 → router → controller → render_template → Jinja2 模板
 ```
 
@@ -155,7 +175,8 @@ pip install -r requirements.txt
 | 数据库驱动 | `PyMySQL` | 连接 MySQL 数据库 |
 | 向量数据库 | `chromadb` | 本地向量存储与检索 |
 | 嵌入模型 | `sentence-transformers`, `torch`, `transformers` | 文本向量化 |
-| LLM 调用 | `requests`, `httpx` | 调用 DeepSeek API |
+| LLM 调用 | `langchain-core`, `langchain-openai`, `langchain-community` | LangChain RAG 管线编排与多模型调用 |
+| Token 计数 | `tiktoken` | cl100k_base 编码精确 token 计数 |
 | 文档解析 | `PyPDF2`, `python-docx`, `lxml` | 解析 PDF/DOCX/TXT 文档 |
 | 认证 | `PyJWT`, `bcrypt` | JWT 生成与密码哈希 |
 | 工具 | `python-dotenv` | 加载 .env 环境变量 |
@@ -277,9 +298,12 @@ nano .env
 | `DATABASE_URL` | MySQL 连接地址 | `mysql+pymysql://root:123456@127.0.0.1:3306/campus_rag?charset=utf8mb4` |
 | `SECRET_KEY` | Flask 密钥（随机字符串） | 任意英文字母数字组合 |
 | `JWT_SECRET_KEY` | JWT 签名密钥（随机字符串） | 任意英文字母数字组合 |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key | `sk-你的APIKey` |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key（向后兼容模式） | `sk-你的APIKey` |
 | `DEEPSEEK_BASE_URL` | DeepSeek API 地址 | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | DeepSeek 模型名 | `deepseek-chat` |
+| `LLM_PROFILES_JSON` | 多模型 Profile 配置（JSON 数组，推荐） | `[{"name":"deepseek","model":"deepseek-chat",...}]` |
+| `LLM_DEFAULT_PROFILE` | 默认模型 profile 名称 | `deepseek` |
+| `LLM_RAG_PROFILE` | RAG 问答专用模型（可选） | 留空使用默认 |
 | `UPLOAD_FOLDER` | 文件上传目录 | `uploads` |
 | `CHROMA_HOST` | ChromaDB 服务地址 | `127.0.0.1` |
 | `CHROMA_PORT` | ChromaDB 服务端口 | `8000` |
@@ -332,7 +356,7 @@ python run.py
 2. 进入「上传文档」页面上传文档（PDF/DOCX/TXT/MD）
 3. 上传成功后文档状态变为 `ready`，表示已建立向量索引
 4. 进入「智能问答」页面提问（如"图书馆的开放时间是什么？"）
-5. 系统自动：问题向量化 → ChromaDB 语义检索 → DeepSeek 生成回答
+5. 系统自动：问题向量化 → 向量检索 + 余弦过滤 → LLM 相关性校验 → LCEL RAG 链（查询改写 + 检索 + 回答生成）→ 后处理
 
 ---
 
@@ -517,5 +541,5 @@ python download_model.py               # 下载嵌入模型
 | **缺少必需配置项** | 确认 `.env` 中 `SECRET_KEY`、`JWT_SECRET_KEY`、`DATABASE_URL` 均已填写 |
 | **pip 安装报错** | 检查 Python 版本是否为 3.9~3.12；Windows 需安装 VC++ 运行时；尝试国内镜像源 |
 | **端口 5001 被占用** | 在 `.env` 中设置 `FLASK_PORT=5002` |
-| **DeepSeek API 返回错误** | 检查 `.env` 中 `DEEPSEEK_API_KEY` 是否正确、是否还有余额 |
+| **LLM API 返回错误** | 检查 `.env` 中 LLM 相关配置（`DEEPSEEK_API_KEY` 或 `LLM_PROFILES_JSON`）是否正确、是否还有余额 |
 | **ChromaDB 初始化失败** | 确认 ChromaDB 服务已启动: `chroma run --host 127.0.0.1 --port 8000 --path ./chroma_data` |

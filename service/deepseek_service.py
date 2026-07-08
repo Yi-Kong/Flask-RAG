@@ -1,120 +1,97 @@
-"""DeepSeek API 调用服务.
+"""LLM 调用服务（LangChain 兼容层）.
 
-使用 OpenAI 兼容的 chat/completions 接口。
-所有配置从环境变量读取，不硬编码 API Key。
+保留原有 chat_service / chat_with_prompt_service 接口签名，
+内部委托给 LangChain ChatOpenAI 执行实际调用。
+
+所有 LLM 调用统一通过此文件，便于：
+  - 切换模型（修改 .env 中的 LLM_DEFAULT_PROFILE 即可）
+  - 获取准确 token 统计（通过 LangChain callback）
+  - 未来扩展流式输出（.stream() 方法）
 """
-import json
 import logging
 from typing import Optional
 
-import requests
-from config import Config
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+
+from service.llm_factory import create_chat_model, get_rag_llm
 
 logger = logging.getLogger(__name__)
 
+# ── 消息格式转换 ──────────────────────────────────────────────────────
 
-def _get_config():
-    """从 Config 读取 DeepSeek 配置."""
-    return {
-        "api_key": Config.DEEPSEEK_API_KEY,
-        "base_url": Config.DEEPSEEK_BASE_URL,
-        "model": Config.DEEPSEEK_MODEL,
-        "timeout": Config.DEEPSEEK_TIMEOUT,
-        "max_tokens": Config.DEEPSEEK_MAX_TOKENS,
-        "temperature": Config.DEEPSEEK_TEMPERATURE,
-    }
+_ROLE_MAP = {
+    "user": HumanMessage,
+    "system": SystemMessage,
+    "assistant": AIMessage,
+}
 
+
+def _dict_to_lc_messages(messages: list) -> list:
+    """将 dict 格式的消息列表转为 LangChain Message 对象.
+
+    Args:
+        messages: [{"role": "user", "content": "..."}, ...]
+
+    Returns:
+        [HumanMessage(...), SystemMessage(...), ...]
+    """
+    lc_messages = []
+    for m in messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        msg_cls = _ROLE_MAP.get(role, HumanMessage)
+        lc_messages.append(msg_cls(content=content))
+    return lc_messages
+
+
+def _build_llm_kwargs(
+    llm: ChatOpenAI,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+) -> dict:
+    """构建调用参数，允许调用方覆盖默认的 temperature/max_tokens."""
+    kwargs = {}
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+    return kwargs
+
+
+# ── 公开 API（保持旧接口签名不变）─────────────────────────────────────
 
 def chat_service(
     messages: list,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
 ) -> str:
-    """调用 DeepSeek Chat API 获取回复.
+    """调用 LLM Chat API 获取回复（兼容旧接口）.
 
     Args:
         messages: 消息列表，格式 [{"role": "user"|"system"|"assistant", "content": "..."}].
-        temperature: 温度参数，为 None 时使用配置默认值.
-        max_tokens: 最大生成 token 数，为 None 时使用配置默认值.
+        temperature: 覆盖默认温度参数.
+        max_tokens: 覆盖默认最大 token 数.
 
     Returns:
         模型回复文本.
 
     Raises:
-        ValueError: API Key 未配置.
-        ConnectionError: 网络连接失败.
-        TimeoutError: 请求超时.
-        RuntimeError: API 返回错误.
+        RuntimeError: LLM profile 未配置.
     """
-    cfg = _get_config()
+    llm = get_rag_llm()
+    lc_messages = _dict_to_lc_messages(messages)
+    kwargs = _build_llm_kwargs(llm, temperature, max_tokens)
 
-    if not cfg["api_key"]:
-        raise ValueError("DeepSeek API Key 未配置，请设置环境变量 DEEPSEEK_API_KEY")
+    response = llm.invoke(lc_messages, **kwargs)
+    content = response.content if hasattr(response, "content") else str(response)
 
-    url = f"{cfg['base_url'].rstrip('/')}/v1/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {cfg['api_key']}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": cfg["model"],
-        "messages": messages,
-        "temperature": temperature if temperature is not None else cfg["temperature"],
-        "max_tokens": max_tokens if max_tokens is not None else cfg["max_tokens"],
-        "stream": False,
-    }
-
-    # 安全日志：不打印完整 API Key
-    masked_key = cfg["api_key"][:8] + "***" if len(cfg["api_key"]) > 8 else "***"
-    logger.info(
-        "调用 DeepSeek API: model=%s, url=%s, key=%s, timeout=%ds",
-        cfg["model"], url, masked_key, cfg["timeout"],
-    )
-
-    try:
-        resp = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=cfg["timeout"],
-        )
-    except requests.exceptions.Timeout:
-        logger.error("DeepSeek API 请求超时（%ds）", cfg["timeout"])
-        raise TimeoutError(f"DeepSeek API 请求超时（{cfg['timeout']}秒）")
-    except requests.exceptions.ConnectionError as e:
-        logger.error("DeepSeek API 连接失败: %s", e)
-        raise ConnectionError(f"DeepSeek API 连接失败: {str(e)}")
-    except requests.exceptions.RequestException as e:
-        logger.error("DeepSeek API 请求异常: %s", e)
-        raise RuntimeError(f"DeepSeek API 请求异常: {str(e)}")
-
-    if not resp.ok:
-        logger.error("DeepSeek API 返回错误: status=%d, body=%s", resp.status_code, resp.text[:500])
-        raise RuntimeError(f"DeepSeek API 返回错误（{resp.status_code}）")
-
-    try:
-        data = resp.json()
-    except json.JSONDecodeError as e:
-        logger.error("DeepSeek API 响应解析失败: %s", e)
-        raise RuntimeError("DeepSeek API 响应格式异常")
-
-    # 提取回答内容
-    choices = data.get("choices", [])
-    if not choices:
-        logger.error("DeepSeek API 返回空 choices: %s", json.dumps(data, ensure_ascii=False)[:500])
-        raise RuntimeError("DeepSeek API 未返回有效回答")
-
-    content = choices[0].get("message", {}).get("content", "")
-    if not content:
-        logger.warning("DeepSeek API 返回内容为空")
-
-    # 打印 token 用量（用于监控）
-    usage = data.get("usage", {})
+    # 记录 token 用量
+    usage = getattr(response, "response_metadata", {}).get("token_usage", {})
     if usage:
         logger.info(
-            "DeepSeek API 调用完成: prompt_tokens=%s, completion_tokens=%s, total_tokens=%s",
+            "LLM 调用完成: model=%s, prompt_tokens=%s, completion_tokens=%s, total_tokens=%s",
+            getattr(llm, "model_name", "?"),
             usage.get("prompt_tokens", "?"),
             usage.get("completion_tokens", "?"),
             usage.get("total_tokens", "?"),
@@ -129,13 +106,13 @@ def chat_with_prompt_service(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
 ) -> str:
-    """使用 system + user 双消息调用 DeepSeek Chat.
+    """使用 system + user 双消息调用 LLM（兼容旧接口）.
 
     Args:
         system_prompt: 系统提示词.
         user_prompt: 用户提示词（含参考资料 + 用户问题）.
-        temperature: 温度参数.
-        max_tokens: 最大生成 token 数.
+        temperature: 覆盖默认温度参数.
+        max_tokens: 覆盖默认最大 token 数.
 
     Returns:
         模型回复文本.

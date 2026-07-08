@@ -87,6 +87,18 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")       # Secret，不给默认值
     JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "2"))
 
+    # ── LLM 模型 Profile 配置 ────────────────────────────────
+    # 模型 profiles 列表（JSON 数组），每个 profile 包含 name/model/api_key/base_url 等字段
+    # 示例: [{"name":"deepseek","provider":"openai_compatible","model":"deepseek-chat","api_key":"sk-xxx","base_url":"https://api.deepseek.com","temperature":0.3,"max_tokens":2048,"timeout":60}]
+    # 留空时自动从 DEEPSEEK_* 配置项构建默认 profile
+    LLM_PROFILES_JSON = os.getenv("LLM_PROFILES_JSON", "")
+
+    # 默认使用的模型 profile 名称（对应 profiles 中的 name 字段）
+    LLM_DEFAULT_PROFILE = os.getenv("LLM_DEFAULT_PROFILE", "deepseek")
+
+    # RAG 问答专用模型 profile（可选，为空时使用 LLM_DEFAULT_PROFILE）
+    LLM_RAG_PROFILE = os.getenv("LLM_RAG_PROFILE", None)
+
     # ── Coze API 配置 ───────────────────────────────────────
     COZE_API_TOKEN = os.getenv("COZE_API_TOKEN")        # Secret，不给默认值
     COZE_WORKFLOW_ID = os.getenv("COZE_WORKFLOW_ID")    # Secret，不给默认值
